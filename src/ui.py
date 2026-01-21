@@ -59,23 +59,31 @@ class RadarUI:
             if speed > self.max_speed:
                 color = self.COLOR_WARNING # İhlal (Hızlı)
                 tag = " ! IHLAL !"
-                should_draw = True
-            elif speed < self.min_speed:
-                # Kullanıcı "hız yapanlar" dedi ama çok yavaş gidenler de (otoban vb) tehlikedir.
-                # Opsiyonel: Bunları da Sarı ile gösterelim, normali gizleyelim.
-                color = self.COLOR_SLOW    # İhlal (Yavaş)
-                tag = " (YAVAS)"
-                should_draw = True
+            # Renk belirle (Hız limitine veya Füzyon durumuna göre)
+            color = data.get('color', None)
+            if color is None:
+                color = (0, 0, 255) if speed > self.max_speed else (0, 255, 0)
             
-            if should_draw:
-                # Kutu çizimi
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            # Kutu çiz
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            
+            # Etiket metni
+            label = f"ID: {track_id} | {int(speed)} km/s"
+            
+            # Füzyon Durumu Ekranı
+            fusion_status = data.get('fusion_status', None)
+            radar_val = data.get('radar_speed', 0)
+            
+            if fusion_status:
+                if fusion_status == "VERIFIED":
+                    label += " [ONAY]"
+                elif fusion_status == "MISMATCH":
+                    label += f" [HATA! R:{int(radar_val)}]"
                 
-                # Etiket Arkaplanı
-                label = f"ID:{track_id} | {int(speed)} km/h{tag}"
-                
-                (w, h), _ = cv2.getTextSize(label, self.font, 0.6, 1)
-                cv2.rectangle(frame, (x1, y1 - 25), (x1 + w, y1), color, -1)
-                cv2.putText(frame, label, (x1, y1 - 8), self.font, 0.6, (255,255,255), 1)
+            
+            # Arka plan kutusu (Okunabilirlik için)
+            (w, h), _ = cv2.getTextSize(label, self.font, 0.6, 1)
+            cv2.rectangle(frame, (x1, y1 - 25), (x1 + w, y1), color, -1)
+            cv2.putText(frame, label, (x1, y1 - 8), self.font, 0.6, (255,255,255), 1)
             
         return frame

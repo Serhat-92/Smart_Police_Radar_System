@@ -1,4 +1,11 @@
-ultralytics
-opencv-python
-numpy
-supervision
+# AI & Bilgisayarlı Görü
+ultralytics>=8.3.0    # YOLOv8 Modelleri ve Nesne Tespiti için
+opencv-python>=4.8.0  # Görüntü işleme ve Video okuma/yazma
+supervision>=0.16.0   # Gelişmiş görselleştirme ve tracker araçları
+
+# Donanım & IO
+pyserial>=3.5         # Radar donanımı (OPS243/HB100) ile UART/USB iletişimi
+obd>=0.7.1            # OBD-II Araç Beyni iletişimi (ELM327)
+
+# Matematik & Veri
+numpy>=1.24.0         # Matris işlemleri ve sayısal analiz

@@ -18,7 +18,19 @@ class SpeedEstimator:
     def update(self, detections):
         """
         Nesne takibi ve hız hesaplama algoritmasını çalıştırır.
-        N-Frame Rolling Average yöntemi ile gürültü filtrelenir.
+        
+        Matematiksel Model:
+        1.  Veri, 'Kayar Pencere' (Rolling Window) yöntemiyle toplanır (Son N kare).
+        2.  Her karede aracın Y eksenindeki (dikey) konumu kaydedilir.
+        3.  Piksel cinsinden yer değiştirme (Delta Pixel) hesaplanır.
+        4.  Zaman farkı (Delta Time) kullanılarak anlık hız bulunur: V = dP / dT
+        5.  `SPEED_FACTOR` ile piksel hızı fiziksel hıza (km/s) dönüştürülür.
+                   V(km/h) = (PikselHızı) * KATSAYI * 100
+                   
+        Gürültü Filtreleme:
+        -   Ham hız verisi çok gürültülüdür (Jitter).
+        -   Bu yüzden son 15 ölçümün 'Medyanı' (Ortanca değeri) alınır.
+        -   Medyan filtresi, ani sıçramaları (Outliers) ortalamadan daha iyi eler.
         """
         current_time = time.time()
         current_data = {}
@@ -59,8 +71,9 @@ class SpeedEstimator:
                 state['history'].pop(0)
             
             # Algoritma konverjansı için minimum veri seti kontrolü
-            if len(state['history']) >= 5:
-                # 5 kare öncesine göre değişim
+            # Daha hızlı tepki için 5 kareden 3 kareye düşürüldü.
+            if len(state['history']) >= 3:
+                # 3 kare öncesine göre değişim (Daha kısa vade, daha çok veri)
                 prev_time, prev_y = state['history'][0]
                 curr_time, curr_y = state['history'][-1]
                 
@@ -77,7 +90,8 @@ class SpeedEstimator:
                     # Anomali Filtresi (Outlier Rejection)
                     if raw_speed > 300: raw_speed = state['last_speed']
                     # Mikro-hareket Filtresi (Jitter Reduction)
-                    if delta_pixel < 2: raw_speed = 0
+                    # Eşik değeri 2'den 0.5'e düşürüldü. Uzak araçlar için kritik.
+                    if delta_pixel < 0.5: raw_speed = 0
                     
                     state['speed_buffer'].append(raw_speed)
                     if len(state['speed_buffer']) > 15:
