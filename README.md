@@ -1,6 +1,6 @@
 # Akıllı Mobil Radar Sistemi (Smart Mobile Radar)
 
-**Geliştirici:** [Adınız Soyadınız]
+**Geliştirici:** [Yusuf Serhat Tümtürk]
 **Sürüm:** 1.0.0
 
 ## Proje Hakkında

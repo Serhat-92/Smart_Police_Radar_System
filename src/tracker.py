@@ -3,6 +3,7 @@ HIZ TAKİP VE ANALİZ ALGORİTMASI
 Geliştirici: Yusuf Serhat Tümtürk
 """
 import time
+import statistics
 
 class SpeedEstimator:
     def __init__(self, speed_factor=1.0):
@@ -82,7 +83,7 @@ class SpeedEstimator:
                     if len(state['speed_buffer']) > 15:
                         state['speed_buffer'].pop(0)
                         
-                    avg_speed = sum(state['speed_buffer']) / len(state['speed_buffer'])
+                    avg_speed = statistics.median(state['speed_buffer'])
                     
                     display_speed = avg_speed
                     state['last_speed'] = avg_speed

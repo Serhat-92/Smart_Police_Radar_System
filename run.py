@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # Varsayılanlar
     default_max = 90
     default_min = 30
-    default_factor = 0.5
+    default_factor = 0.16
     
     # Kullanıcıdan Girdi Al (Opsiyonel)
     try:
