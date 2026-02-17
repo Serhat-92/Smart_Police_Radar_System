@@ -35,3 +35,5 @@ runs/
 # IDE
 .vscode/
 .idea/
+server_data/
+test_image.jpg

@@ -5,6 +5,7 @@ Geliştirici: Yusuf Serhat Tümtürk
 import cv2
 import sys
 import os
+import argparse
 
 # src klasörünü path'e ekle (eğer src dışından çağrılırsa diye)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -16,8 +17,10 @@ from recorder import EvidenceRecorder
 from radar_hardware import RadarSensor, MockRadarSensor
 from patrol_speed import PatrolSpeedMonitor # YENI: Polis Hızı Modülü
 
-def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_port=None):
+def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_port=None, server_url=None):
     print(f"Sistem Başlatılıyor (MAX: {max_speed}, MIN: {min_speed}, FACTOR: {speed_factor})...")
+    if server_url:
+        print(f"📡 5G MODÜLÜ AKTİF: {server_url}")
     
     # Donanım Başlatma (Radar Sensör)
     hw_radar = None
@@ -44,16 +47,12 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
     detector = VehicleDetector() 
     tracker = SpeedEstimator(speed_factor=speed_factor)
     ui = RadarUI(max_speed=max_speed, min_speed=min_speed)
-    recorder = EvidenceRecorder(output_dir="ihlaller")
+    
+    # RECORDER (Sunucu URL'sini buraya veriyoruz)
+    recorder = EvidenceRecorder(output_dir="ihlaller", server_url=server_url)
     
     # Video kaynağını aç
     cap = cv2.VideoCapture(video_source)
-    
-    # Donanım Sensörü Entegrasyonu
-    hw_radar = None
-    # Eğer video_source ismi "COM" içeriyorsa veya özel bir flag varsa (şimdilik basit mantık)
-    # Ancak main parametrelerinde henüz port yok. Aşağıda eklenecek.
-
     
     if not cap.isOpened():
         print(f"Hata: Video kaynağı açılamadı ({video_source})")
@@ -61,9 +60,6 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
 
     print("Kayıt başladı. Çıkmak için 'q' tuşuna basın.")
     
-    # Polis aracı telemetri verisi (Patrol verisi)
-    own_speed = 0
-
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -76,14 +72,26 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
         # 2. Hız Hesaplama
         vehicle_data = tracker.update(detections)
         
+        # Polis Hızı (OBD)
+        # PatrolSpeedMonitor'dan güncel hız ve ivme verisini al
+        current_patrol_speed, current_patrol_accel = patrol_monitor.get_speed_and_accel()
+
+        hw_absolute_speed = 0 # Default
+
         # Donanım sensör verisi varsa, hız bilgisini güncelle ve karşılaştır
         if hw_radar:
             radar_relative_speed = hw_radar.get_speed() # Radar SİZE GÖRE hızı ölçer
             # --- İVME KONTROLÜ (UNSTABLE CHECK) ---
             # Eğer polis aracı ani hızlanıyor veya fren yapıyorsa (> 2 m/s^2)
             # Radar ölçümü geçersiz sayılmalıdır.
-            is_stable = abs(patrol_accel) < 2.0
+            is_stable = abs(current_patrol_accel) < 2.0
             
+            # Absolute Speed Hesabı (Basit: Radar + Polis Hızı)
+            # Yaklaşan araç: Radar hızı = Araç Hızı + Polis Hızı
+            # Uzaklaşan araç: Radar hızı = Araç Hızı - Polis Hızı (veya tam tersi, duruma göre)
+            # Şimdilik basit toplama (karşı şerit yaklaşan varsayımı)
+            hw_absolute_speed = radar_relative_speed + current_patrol_speed
+
             # Ekranda araç varsa
             if len(vehicle_data) > 0:
                 if radar_relative_speed > 5 and is_stable:
@@ -130,8 +138,6 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
                     vehicle_data[vid]['fusion_status'] = None
 
         #İhlal Kontrolü ve Kayıt
-
-        #İhlal Kontrolü ve Kayıt
         for track_id, data in vehicle_data.items():
             speed = data['speed']
             captured = data.get('captured', False)
@@ -141,21 +147,17 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
             if speed > max_speed and not captured:
                 # Meta verileri hazırla
                 radar_val = data.get('radar_speed', 0)
-                ai_val = data.get('speed', 0) # Eğer füzyon yoksa bu zaten speed'dir
+                ai_val = data.get('speed', 0) 
                 
-                # Eğer füzyon yapıldıysa orijinal AI verisini bulmamız lazım, 
-                # ama şu an 'speed' değişkeni zaten en güvenilir hız.
-                # Basitlik için: Eğer radar varsa radar'ı radar, yoksa speed'i radar kabul edelim (Kamera-Radar gibi)
-                
-                if radar_val == 0: radar_val = speed # Sensör yoksa görsel hız = radar hız
-                ai_pure_val = ai_val # Burası geliştirilebilir, ham veriyi saklamak için
+                if radar_val == 0: radar_val = speed 
+                ai_pure_val = ai_val 
                 
                 # Sapma Hesabı
                 deviation = 0.0
                 if ai_pure_val > 0:
                     deviation = abs(radar_val - ai_pure_val) / ai_pure_val * 100
                 
-                # Fotoğrafı çek ve Paketi Kaydet
+                # Fotoğrafı çek ve Paketi Kaydet (Ve Sunucuya Gönder)
                 recorder.save_violation(
                     frame, 
                     speed=speed, 
@@ -170,10 +172,7 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
                 tracker.mark_captured(track_id)
         
         # 3. Arayüz Çizimi
-        # own_speed'i patrol_monitor'dan güncellemiştik
-        # UI'da gösterilen "Own Speed" artık gerçek OBD verisi
-        if 'patrol_speed' in locals():
-            own_speed = patrol_speed
+        own_speed = current_patrol_speed
         
         frame = ui.draw_detections(frame, vehicle_data)
         frame = ui.draw_dashboard(frame, own_speed, track_count=len(vehicle_data))
@@ -191,13 +190,26 @@ def main(video_source=0, max_speed=90, min_speed=30, speed_factor=1.0, hardware_
     cv2.destroyAllWindows()
     if hw_radar:
         hw_radar.stop()
+    # Recorder'ı durdur (Thread'leri temizle)
+    recorder.stop()
 
 if __name__ == "__main__":
-    # Eğer doğrudan bu dosya çalıştırılırsa varsayılan değerleri kullan
-    source = 0
-    if len(sys.argv) > 1:
-        source = sys.argv[1]
-        if source.isdigit():
-            source = int(source)
-            
-    main(source)
+    parser = argparse.ArgumentParser(description="Mobil Radar Sistemi")
+    parser.add_argument("--source", type=str, default="0", help="Video kaynağı (0, 1 veya dosya yolu)")
+    parser.add_argument("--max_speed", type=int, default=90, help="Hız Limiti")
+    parser.add_argument("--port", type=str, default=None, help="Radar Donanım Portu (COM3, MOCK)")
+    parser.add_argument("--server", type=str, default=None, help="5G Sunucu URL (örn: http://localhost:8000)")
+    
+    args = parser.parse_args()
+    
+    # Source int mi str mi kontrolü
+    src = args.source
+    if src.isdigit():
+        src = int(src)
+        
+    main(
+        video_source=src, 
+        max_speed=args.max_speed, 
+        hardware_port=args.port,
+        server_url=args.server
+    )

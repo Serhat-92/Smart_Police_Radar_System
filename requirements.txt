@@ -9,3 +9,9 @@ obd>=0.7.1            # OBD-II Araç Beyni iletişimi (ELM327)
 
 # Matematik & Veri
 numpy>=1.24.0         # Matris işlemleri ve sayısal analiz
+
+# 5G & Ağ Haberleşmesi (YENI)
+fastapi>=0.100.0      # Komuta Merkezi Sunucusu
+uvicorn>=0.23.0       # Sunucu Motoru
+requests>=2.31.0      # İstemci (Veri Gönderme)
+python-multipart>=0.0.6 # Resim Yükleme Desteği
